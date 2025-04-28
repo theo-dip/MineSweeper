@@ -5,6 +5,7 @@ namespace MineSweeper
     public partial class Form1 : Form
     {
         private string difficulteActuelle;
+        private int caseRevealed;
 
         public Form1()
         {
@@ -32,6 +33,7 @@ namespace MineSweeper
         {
             difficulteActuelle = "Expert";
             LancerNouvellePartie(30, 16, 99);
+            expertToolStripMenuItem.CheckState = CheckState.Checked;
         }
 
 
@@ -59,24 +61,14 @@ namespace MineSweeper
         private void LancerNouvellePartie(int width, int height, int mines)
         {
             Console.WriteLine("test");
-            var board = new Board.Board(width, height, mines);
+            var board = new Board.Board(height, width, mines);
             board.cases = initCases(width, height, mines);
 
-
-            var panel = userControl11.tableLayoutPanel1;
+            var panel = userControl11;
             panel.Controls.Clear();
-            panel.RowCount = height;
-            panel.ColumnCount = width;
-            panel.RowStyles.Clear();
-            panel.ColumnStyles.Clear();
-
-            for (int i = 0; i < height; i++)
-                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-
-            for (int j = 0; j < width; j++)
-                panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18));
 
             var image = new Bitmap(new MemoryStream(Properties.Resources.standard));
+            int cellSize = 18; // taille d'une cellule
 
             foreach (var cell in board.cases)
             {
@@ -84,27 +76,13 @@ namespace MineSweeper
                 {
                     var pictureBox = new PictureBox
                     {
-                        Width = 18,
-                        Height = 18,
+                        Width = cellSize,
+                        Height = cellSize,
                         Image = image,
                         SizeMode = PictureBoxSizeMode.StretchImage,
-                        Margin = new Padding(0)
+                        Margin = new Padding(0),
+                        Location = new Point(cell.posY * cellSize, cell.posX * cellSize) // Positionnement !
                     };
-
-                    //if (!cell.isFlag && !cell.isRevealed)
-                    //{
-
-                    //    pictureBox.MouseEnter += (sender, e) =>
-                    //    {
-                    //        pictureBox.Image = new Bitmap(new MemoryStream(Properties.Resources.survol));
-                    //    };
-
-                    //    pictureBox.MouseLeave += (sender, e) =>
-                    //    {
-                    //        pictureBox.Image = new Bitmap(new MemoryStream(Properties.Resources.standard));
-                    //    };
-
-                    //}
 
                     pictureBox.MouseDown += (sender, e) =>
                     {
@@ -139,71 +117,55 @@ namespace MineSweeper
                                 }
                             }
                         }
+
+                        VerifierVictoire(width * height, mines);
                     };
 
-
-
-
-
-                    panel.Controls.Add(pictureBox, cell.posY, cell.posX);
+                    panel.Controls.Add(pictureBox);
                 }
             }
 
-            
-
+            panel.Width = width * cellSize;
+            panel.Height = height * cellSize;
         }
+
 
         private Case.Case[,] initCases(int width, int height, int mines)
         {
-            Case.Case[,] grid = new Case.Case[width, height];
+            Case.Case[,] grid = new Case.Case[height, width];
 
-            for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
             {
-                for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
                 {
-                    grid[x, y] = new Case.Case(x, y);
+                    grid[y, x] = new Case.Case(x, y);
                 }
             }
 
             Random rand = new Random();
-            for (int i = 0; i < mines; i++)
-            {
-                int x, y;
-                do
-                {
-                    x = rand.Next(0, width);
-                    y = rand.Next(0, height);
-                }
-                while (grid[x, y].isMine);
+            HashSet<Tuple<int, int>> minePositions = new HashSet<Tuple<int, int>>();
 
-                grid[x, y].isMine = true;
+            while (minePositions.Count < mines)
+            {
+                int x = rand.Next(0, width);
+                int y = rand.Next(0, height);
+
+                minePositions.Add(new Tuple<int, int>(x, y));
             }
 
-            for (int x = 0; x < width; x++)
+            foreach (var pos in minePositions)
             {
-                for (int y = 0; y < height; y++)
-                {
-                    if (!grid[x, y].isMine)
-                    {
-                        int adjacentMines = 0;
-                        for (int dx = -1; dx <= 1; dx++)
-                        {
-                            for (int dy = -1; dy <= 1; dy++)
-                            {
-                                int nx = x + dx;
-                                int ny = y + dy;
+                grid[pos.Item2, pos.Item1].isMine = true;
+            }
 
-                                if (nx >= 0 && nx < width && ny >= 0 && ny < height)
-                                {
-                                    if (grid[nx, ny].isMine)
-                                    {
-                                        adjacentMines++;
-                                    }
-                                }
-                            }
-                        }
-                        Console.Write(adjacentMines);
-                        grid[x, y].nbMine = adjacentMines;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (!grid[y, x].isMine)
+                    {
+                        int adjacentMines = CountAdjacentMines(grid, x, y, width, height);
+                        grid[y, x].nbMine = adjacentMines;
                     }
                 }
             }
@@ -211,24 +173,61 @@ namespace MineSweeper
             return grid;
         }
 
-        private void ReveleCase(Case.Case cell, TableLayoutPanel panel, Case.Case[,] cases)
+        private int CountAdjacentMines(Case.Case[,] grid, int x, int y, int width, int height)
+        {
+            int adjacentMines = 0;
+
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    int nx = x + dx;
+                    int ny = y + dy;
+
+                    if (nx >= 0 && nx < width && ny >= 0 && ny < height)
+                    {
+                        if (grid[ny, nx].isMine)
+                        {
+                            adjacentMines++;
+                        }
+                    }
+                }
+            }
+
+            return adjacentMines;
+        }
+
+
+
+        private void ReveleCase(Case.Case cell, UserControl panel, Case.Case[,] cases)
         {
             if (cell.isRevealed) return;
             cell.isRevealed = true;
 
-            Control control = panel.GetControlFromPosition(cell.posY, cell.posX);
-            if (control is PictureBox pictureBox)
+            int cellSize = 18;
+
+            foreach (Control control in panel.Controls)
             {
-                if (cell.nbMine > 0)
+                if (control is PictureBox pictureBox)
                 {
-                    var resourceName = "cell" + cell.nbMine;
-                    var resource = (byte[])Properties.Resources.ResourceManager.GetObject(resourceName);
-                    pictureBox.Image = new Bitmap(new MemoryStream(resource));
-                }
-                else
-                {
-                    var emptyResource = (byte[])Properties.Resources.ResourceManager.GetObject("cell0");
-                    pictureBox.Image = new Bitmap(new MemoryStream(emptyResource));
+                    if (pictureBox.Location.X == cell.posY * cellSize && pictureBox.Location.Y == cell.posX * cellSize)
+                    {
+                        if (cell.nbMine > 0)
+                        {
+                            var resourceName = "cell" + cell.nbMine;
+                            var resource = (byte[])Properties.Resources.ResourceManager.GetObject(resourceName);
+                            pictureBox.Image = new Bitmap(new MemoryStream(resource));
+                            caseRevealed++;
+                        }
+                        else
+                        {
+                            var emptyResource = (byte[])Properties.Resources.ResourceManager.GetObject("cell0");
+                            pictureBox.Image = new Bitmap(new MemoryStream(emptyResource));
+                            caseRevealed++;
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -255,28 +254,19 @@ namespace MineSweeper
                     }
                 }
             }
-
-            VerifierVictoire(cases);
         }
 
-        private void VerifierVictoire(Case.Case[,] cases)
+
+        private void VerifierVictoire(int nbCase, int nbMine)
         {
-            foreach (var cell in cases)
+            if ((nbCase - nbMine) == caseRevealed)
             {
-                if (!cell.isMine && !cell.isRevealed)
-                {
-                    return;
-                }
+                MessageBox.Show("🏆 Félicitations, vous avez gagné !", "Victoire", MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
 
-            MessageBox.Show("🏆 Félicitations, vous avez gagné !", "Victoire", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            
         }
-
-
-
-
-
-
 
 
     }
